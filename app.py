@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 import matplotlib.pyplot as plt
-import uuid
 
 # Load and preprocess data (cached)
 @st.cache_data
@@ -29,7 +28,7 @@ features = ['demandMW_lag1', 'demandMW_lag2', 'demandMW_lag3', 'demandMW_rollmea
 X_train = train_df[features]
 y_train = train_df['demandMW']
 
-# Train model once (cached)
+# Train model (cached)
 @st.cache_resource
 def train_model():
     rf = RandomForestRegressor(n_estimators=100, random_state=42)
@@ -48,32 +47,62 @@ if user_date:
     # Create a 24-hour datetime range for the selected date
     date_range = pd.date_range(start=user_date, end=user_date + pd.Timedelta(hours=23), freq='H')
     
-    # Prepare data for prediction
-    pred_data = []
-    last_known_data = df[df['datetime'] < user_date].tail(3).copy()
-    
-    if len(last_known_data) < 3:
-        st.warning("Not enough historical data to make predictions for the selected date.")
-    else:
-        current_data = last_known_data.copy()
-        predictions = []
+    # Get the last known data point and predict up to the selected date
+    last_known_date = df['datetime'].max()
+    if last_known_date < user_date:
+        # Generate datetime range from last known date + 1 hour to the start of user_date
+        pred_range = pd.date_range(start=last_known_date + pd.Timedelta(hours=1), 
+                                 end=user_date - pd.Timedelta(hours=1), freq='H')
+        feature_data = df[df['datetime'] <= last_known_date].tail(3).copy()
         
+        if len(feature_data) < 3:
+            st.warning("Not enough historical data to make predictions.")
+        else:
+            # Predict sequentially up to user_date
+            for dt in pred_range:
+                hour_sin = np.sin(2 * np.pi * dt.hour / 24)
+                demand_lag1 = feature_data['demandMW'].iloc[-1]
+                demand_lag2 = feature_data['demandMW'].iloc[-2]
+                demand_lag3 = feature_data['demandMW'].iloc[-3]
+                roll_mean = feature_data['demandMW'].tail(3).mean()
+                
+                features_array = np.array([[demand_lag1, demand_lag2, demand_lag3, roll_mean, hour_sin]])
+                pred = rf_final.predict(features_array)[0]
+                
+                # Update feature_data with new prediction
+                new_row = pd.DataFrame({
+                    'datetime': [dt],
+                    'demandMW': [pred],
+                    'hour_sin': [hour_sin],
+                    'demandMW_lag1': [demand_lag1],
+                    'demandMW_lag2': [demand_lag2],
+                    'demandMW_lag3': [demand_lag3],
+                    'demandMW_rollmean3': [roll_mean]
+                })
+                feature_data = pd.concat([feature_data, new_row], ignore_index=True)
+                feature_data = feature_data.tail(3)  # Keep only the last 3 rows
+    else:
+        # If user_date is on or before last known date, use available data
+        feature_data = df[df['datetime'] < user_date].tail(3).copy()
+        if len(feature_data) < 3:
+            st.warning("Not enough historical data to make predictions for the selected date.")
+            feature_data = None
+    
+    if feature_data is not None:
+        # Predict for the selected date (24 hours)
+        predictions = []
         for dt in date_range:
-            # Prepare features for the current hour
             hour_sin = np.sin(2 * np.pi * dt.hour / 24)
-            demand_lag1 = current_data['demandMW'].iloc[-1]
-            demand_lag2 = current_data['demandMW'].iloc[-2]
-            demand_lag3 = current_data['demandMW'].iloc[-3]
-            roll_mean = current_data['demandMW'].tail(3).mean()
+            demand_lag1 = feature_data['demandMW'].iloc[-1]
+            demand_lag2 = feature_data['demandMW'].iloc[-2]
+            demand_lag3 = feature_data['demandMW'].iloc[-3]
+            roll_mean = feature_data['demandMW'].tail(3).mean()
             
-            # Create feature array
             features_array = np.array([[demand_lag1, demand_lag2, demand_lag3, roll_mean, hour_sin]])
-            
-            # Predict
             pred = rf_final.predict(features_array)[0]
             predictions.append(pred)
             
-            # Update current_data for next iteration
+            # Update feature_data with the predicted value
             new_row = pd.DataFrame({
                 'datetime': [dt],
                 'demandMW': [pred],
@@ -83,10 +112,10 @@ if user_date:
                 'demandMW_lag3': [demand_lag3],
                 'demandMW_rollmean3': [roll_mean]
             })
-            current_data = pd.concat([current_data, new_row], ignore_index=True)
-            current_data = current_data.tail(3)  # Keep only last 3 rows for next iteration
+            feature_data = pd.concat([feature_data, new_row], ignore_index=True)
+            feature_data = feature_data.tail(3)  # Keep only the last 3 rows
         
-        # Create results DataFrame
+        # Create results DataFrame for table
         result_df = pd.DataFrame({
             'Hour': date_range,
             'Predicted Demand (MW)': predictions
@@ -100,7 +129,7 @@ if user_date:
         
         # Plot predictions
         fig, ax = plt.subplots(figsize=(10, 5))
-        ax.plot(date_range, predictions, label='Predicted DemandMW', marker='o')
+        ax.plot(date_range, predictions, label='Predicted Demand (MW)', marker='o', color='#1f77b4')
         ax.set_title(f'Predicted Demand for {user_date.date()}')
         ax.set_xlabel('Hour')
         ax.set_ylabel('Demand (MW)')
@@ -108,3 +137,49 @@ if user_date:
         ax.grid(True)
         plt.xticks(rotation=45)
         st.pyplot(fig)
+
+        # Create Chart.js plot
+        chart_data = {
+            'type': 'line',
+            'data': {
+                'labels': [dt.strftime('%H:%M') for dt in date_range],
+                'datasets': [{
+                    'label': 'Predicted Demand (MW)',
+                    'data': predictions,
+                    'borderColor': '#1f77b4',
+                    'backgroundColor': 'rgba(31, 119, 180, 0.2)',
+                    'fill': False,
+                    'pointRadius': 5,
+                    'pointHoverRadius': 7
+                }]
+            },
+            'options': {
+                'responsive': True,
+                'plugins': {
+                    'title': {
+                        'display': True,
+                        'text': f'Predicted Demand for {user_date.date()}'
+                    },
+                    'legend': {
+                        'display': True
+                    }
+                },
+                'scales': {
+                    'x': {
+                        'title': {
+                            'display': True,
+                            'text': 'Hour'
+                        }
+                    },
+                    'y': {
+                        'title': {
+                            'display': True,
+                            'text': 'Demand (MW)'
+                        }
+                    }
+                }
+            }
+        }
+        
+        st.subheader('Interactive Predicted Demand Chart')
+        st.write("```chartjs\n" + str(chart_data) + "\n```")
