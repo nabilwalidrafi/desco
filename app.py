@@ -96,7 +96,7 @@ if user_date:
 
         st.subheader('Predicted Demand and Differences')
         st.dataframe(result_df.style.format({
-            'Actual DemandMW': '{:.2f}',
-            'Predicted DemandMW': '{:.2f}',
-            'Difference (Actual - Predicted)': '{:.2f}'
+            'Actual Demand': '{:.2f}',
+            'Predicted': '{:.2f}',
+            'Difference': '{:.2f}'
         }))
