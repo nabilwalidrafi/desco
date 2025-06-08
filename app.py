@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates # Import for date formatting
+import matplotlib.ticker as ticker # Import for tick control
 
 # Load and preprocess data (cached)
 @st.cache_data
@@ -37,7 +39,7 @@ def train_model():
 
 rf_final = train_model()
 
-st.title('Demand Forecasting App')
+st.title('DESCO Electricity Demand Predictor')
 
 # User input for any date
 user_date = st.date_input('Select a date for prediction')
@@ -52,7 +54,7 @@ if user_date:
     if last_known_date < user_date:
         # Generate datetime range from last known date + 1 hour to the start of user_date
         pred_range = pd.date_range(start=last_known_date + pd.Timedelta(hours=1), 
-                                 end=user_date - pd.Timedelta(hours=1), freq='H')
+                                     end=user_date - pd.Timedelta(hours=1), freq='H')
         feature_data = df[df['datetime'] <= last_known_date].tail(3).copy()
         
         if len(feature_data) < 3:
@@ -129,11 +131,23 @@ if user_date:
         
         # Plot predictions
         fig, ax = plt.subplots(figsize=(10, 5))
-        ax.plot(date_range[11:13], predictions, label='Predicted Demand (MW)', marker='o', color='#1f77b4')
+        ax.plot(date_range, predictions, label='Predicted Demand (MW)', marker='o', color='#1f77b4')
         ax.set_title(f'Predicted Demand for {user_date.date()}')
         ax.set_xlabel('Hour')
         ax.set_ylabel('Demand (MW)')
         ax.legend()
         ax.grid(True)
-        plt.xticks(rotation=45)
+
+        # --- MODIFICATION STARTS HERE ---
+        # Set major tick locator to show ticks every 3 hours
+        ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
+        # Format the major ticks to display only the hour
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
+
+        # Set minor ticks for every hour, but without labels (optional, helps with grid)
+        # ax.xaxis.set_minor_locator(mdates.HourLocator(interval=1))
+        # ax.xaxis.set_minor_formatter(mdates.DateFormatter('')) # No labels for minor ticks
+        # --- MODIFICATION ENDS HERE ---
+
+        plt.xticks(rotation=45) # Keep rotation for readability
         st.pyplot(fig)
