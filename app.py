@@ -130,7 +130,7 @@ if user_date:
         # Plot predictions
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.plot(date_range, predictions, label='Predicted Demand (MW)', marker='o', color='#1f77b4')
-	ax.set_title(f'Predicted Demand for {user_date.strftime("%I %p")}')
+        ax.set_title(f'Predicted Demand for {user_date.strftime("%I %p")}')
         ax.set_xlabel('Hour')
         ax.set_ylabel('Demand (MW)')
         ax.legend()
