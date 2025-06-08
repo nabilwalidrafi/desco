@@ -130,56 +130,10 @@ if user_date:
         # Plot predictions
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.plot(date_range, predictions, label='Predicted Demand (MW)', marker='o', color='#1f77b4')
-        ax.set_title(f'Predicted Demand for {user_date.date()}')
+	ax.set_title(f'Predicted Demand for {user_date.strftime("%I %p")}')
         ax.set_xlabel('Hour')
         ax.set_ylabel('Demand (MW)')
         ax.legend()
         ax.grid(True)
         plt.xticks(rotation=45)
         st.pyplot(fig)
-
-        # Create Chart.js plot
-        chart_data = {
-            'type': 'line',
-            'data': {
-                'labels': [dt.strftime('%H:%M') for dt in date_range],
-                'datasets': [{
-                    'label': 'Predicted Demand (MW)',
-                    'data': predictions,
-                    'borderColor': '#1f77b4',
-                    'backgroundColor': 'rgba(31, 119, 180, 0.2)',
-                    'fill': False,
-                    'pointRadius': 5,
-                    'pointHoverRadius': 7
-                }]
-            },
-            'options': {
-                'responsive': True,
-                'plugins': {
-                    'title': {
-                        'display': True,
-                        'text': f'Predicted Demand for {user_date.date()}'
-                    },
-                    'legend': {
-                        'display': True
-                    }
-                },
-                'scales': {
-                    'x': {
-                        'title': {
-                            'display': True,
-                            'text': 'Hour'
-                        }
-                    },
-                    'y': {
-                        'title': {
-                            'display': True,
-                            'text': 'Demand (MW)'
-                        }
-                    }
-                }
-            }
-        }
-        
-        st.subheader('Interactive Predicted Demand Chart')
-        st.write("```chartjs\n" + str(chart_data) + "\n```")
