@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import r2_score
 import matplotlib.pyplot as plt
 
 # Load and preprocess data (cached)
@@ -10,93 +9,92 @@ import matplotlib.pyplot as plt
 def load_data():
     df = pd.read_excel('data0.xlsx')
     df['datetime'] = pd.to_datetime(df['datetime'])
-    df['hour_sin'] = np.sin(2 * np.pi * df['datetime'].dt.hour / 24)
+    df['hour'] = df['datetime'].dt.hour
+    df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
     df['demandMW_lag1'] = df['demandMW'].shift(1)
     df['demandMW_lag2'] = df['demandMW'].shift(2)
     df['demandMW_lag3'] = df['demandMW'].shift(3)
     df['demandMW_rollmean3'] = df['demandMW'].shift(1).rolling(window=3).mean()
-    df = df.dropna()
+    df = df.dropna().reset_index(drop=True)
     return df
 
 df = load_data()
 
-# Define training and test sets
-train_start = '2023-01-01'
-train_end = '2024-12-31'
-test_start = '2025-01-01'
-test_end = '2025-03-10'
-
-train_df = df[(df['datetime'] >= train_start) & (df['datetime'] <= train_end)].copy()
-test_df = df[(df['datetime'] >= test_start) & (df['datetime'] <= test_end)].copy()
-
+# Define training set
+train_df = df[df['datetime'] < '2025-01-01'].copy()
 features = ['demandMW_lag1', 'demandMW_lag2', 'demandMW_lag3', 'demandMW_rollmean3', 'hour_sin']
 X_train = train_df[features]
 y_train = train_df['demandMW']
 
-# Train model once (cached)
+# Train model (cached)
 @st.cache_resource
 def train_model():
     rf = RandomForestRegressor(n_estimators=100, random_state=42)
     rf.fit(X_train, y_train)
     return rf
 
-rf_final = train_model()
+model = train_model()
 
-st.title('Demand Forecasting App')
+st.title('Hourly Demand Forecasting')
 
-user_date = st.date_input(
-    'Select a date between January 1, 2025 and March 10, 2025',
-    min_value=pd.Timestamp('2025-01-01'),
-    max_value=pd.Timestamp('2025-03-10')
-)
-
+user_date = st.date_input("Select a date to predict hourly demand")
 if user_date:
-    user_date = pd.Timestamp(user_date)
-    start_date = user_date - pd.Timedelta(days=6)  # 7-day window
+    forecast_date = pd.Timestamp(user_date)
+    hours = pd.date_range(start=forecast_date, periods=24, freq='H')
 
-    # Filter the test data for the 7-day window
-    week_data = test_df[(test_df['datetime'] >= start_date) & (test_df['datetime'] <= user_date)].copy()
+    # Use the most recent values before the selected day to create initial state
+    past_df = df[df['datetime'] < forecast_date].copy().reset_index(drop=True)
 
-    if week_data.empty:
-        st.warning("No data available for the selected week.")
+    if len(past_df) < 3:
+        st.error("Not enough historical data to predict.")
     else:
-        X_week = week_data[features]
-        y_actual = week_data['demandMW']
+        last_known = past_df.iloc[-3:].copy()
+        preds = []
+        current_history = last_known.copy()
 
-        # Predict
-        y_pred = rf_final.predict(X_week)
+        for h in range(24):
+            hour = h
+            hour_sin = np.sin(2 * np.pi * hour / 24)
 
-        # Calculate difference
-        diff = y_actual.values - y_pred
+            lag1 = current_history.iloc[-1]['demandMW']
+            lag2 = current_history.iloc[-2]['demandMW']
+            lag3 = current_history.iloc[-3]['demandMW']
+            rollmean3 = current_history['demandMW'].iloc[-3:].mean()
 
-        # Calculate R² on the week window, show as Accuracy
-        accuracy = r2_score(y_actual, y_pred)
+            input_features = pd.DataFrame([{
+                'demandMW_lag1': lag1,
+                'demandMW_lag2': lag2,
+                'demandMW_lag3': lag3,
+                'demandMW_rollmean3': rollmean3,
+                'hour_sin': hour_sin
+            }])
 
-        # Plot actual vs predicted demand
+            prediction = model.predict(input_features)[0]
+            preds.append(prediction)
+
+            # Append predicted value to history for next step
+            next_row = pd.DataFrame([{
+                'datetime': forecast_date + pd.Timedelta(hours=h),
+                'hour': hour,
+                'demandMW': prediction
+            }])
+            current_history = pd.concat([current_history, next_row], ignore_index=True)
+
+        # Create result dataframe
+        result_df = pd.DataFrame({
+            'Datetime': hours,
+            'Predicted Demand (MW)': preds
+        })
+
+        # Plot
         fig, ax = plt.subplots(figsize=(10, 5))
-        ax.plot(week_data['datetime'], y_actual, label='Actual DemandMW', marker='o')
-        ax.plot(week_data['datetime'], y_pred, label='Predicted DemandMW', marker='x')
-        ax.set_title('Actual vs Predicted DemandMW (7-day window)')
-        ax.set_xlabel('Date')
-        ax.set_ylabel('DemandMW')
-        ax.legend()
+        ax.plot(result_df['Datetime'], result_df['Predicted Demand (MW)'], marker='o', linestyle='-')
+        ax.set_title(f'Predicted Hourly Demand for {forecast_date.date()}')
+        ax.set_xlabel('Hour')
+        ax.set_ylabel('Demand (MW)')
         ax.grid(True)
-
         st.pyplot(fig)
 
-        st.markdown(f"### Accuracy (R²) over selected week: {accuracy:.3f}")
-
-        # Show predicted demand and difference table
-        result_df = pd.DataFrame({
-            'Date': week_data['datetime'],
-            'Actual': y_actual,
-            'Predicted Demand': y_pred,
-            'Difference': diff
-        }).set_index('Date')
-
-        st.subheader('Predicted Demand and Differences')
-        st.dataframe(result_df.style.format({
-            'Actual Demand': '{:.2f}',
-            'Predicted': '{:.2f}',
-            'Difference': '{:.2f}'
-        }))
+        # Table
+        st.subheader('Hourly Forecast Table')
+        st.dataframe(result_df.style.format({'Predicted Demand (MW)': '{:.2f}'}))
