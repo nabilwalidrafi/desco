@@ -89,9 +89,9 @@ if user_date:
         # Show predicted demand and difference table
         result_df = pd.DataFrame({
             'Date': week_data['datetime'],
-            'Actual DemandMW': y_actual,
-            'Predicted DemandMW': y_pred,
-            'Difference (Actual - Predicted)': diff
+            'Actual': y_actual,
+            'Predicted Demand': y_pred,
+            'Difference': diff
         }).set_index('Date')
 
         st.subheader('Predicted Demand and Differences')
