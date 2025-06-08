@@ -23,7 +23,7 @@ df = load_data()
 
 # Define training set
 train_start = '2023-01-01'
-train_end = '2024-12-31'
+train_end = '2025-03-10'
 train_df = df[(df['datetime'] >= train_start) & (df['datetime'] <= train_end)].copy()
 
 features = ['demandMW_lag1', 'demandMW_lag2', 'demandMW_lag3', 'demandMW_rollmean3', 'hour_sin']
