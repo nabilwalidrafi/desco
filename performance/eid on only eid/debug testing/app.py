@@ -80,12 +80,16 @@ user_date = st.date_input('Select a date for prediction')
 
 def is_eid_date(dt, periods):
     dt = pd.to_datetime(dt, utc=True).tz_localize(None)
+    st.write(f"Checking date: {dt}")
     for eid_type, eid_ranges in periods.items():
         for start, end in eid_ranges:
             start = pd.to_datetime(start, utc=True).tz_localize(None)
             end = pd.to_datetime(end, utc=True).tz_localize(None)
+            st.write(f"Range check: {start} to {end}, dt: {dt}")
             if start <= dt <= end:
+                st.write(f"Match found for {eid_type}")
                 return eid_type
+    st.write("No match found")
     return None
 
 if user_date:
@@ -113,15 +117,19 @@ if user_date:
                 
                 features_array = np.array([[demand_lag1, demand_lag2, demand_lag3, roll_mean, hour_sin]])
                 eid_type = is_eid_date(dt, holiday_periods)
+                st.write(f"Pre-prediction eid_type: {eid_type}")
                 if eid_type == 'eid_ul_fitr':
                     pred = rf_eid_fitr.predict(features_array)[0]
                     adjusted_lag1 = demand_lag1 * 0.2 + eid_fitr_mean * 0.8 if demand_lag1 > eid_fitr_mean else demand_lag1
+                    st.write(f"Using Eid ul Fitr model, pred: {pred}, adjusted_lag1: {adjusted_lag1}")
                 elif eid_type == 'eid_ul_adha':
                     pred = rf_eid_adha.predict(features_array)[0]
                     adjusted_lag1 = demand_lag1 * 0.2 + eid_adha_mean * 0.8 if demand_lag1 > eid_adha_mean else demand_lag1
+                    st.write(f"Using Eid ul Adha model, pred: {pred}, adjusted_lag1: {adjusted_lag1}")
                 else:
                     pred = rf_general.predict(features_array)[0]
                     adjusted_lag1 = demand_lag1
+                    st.write(f"Using General model, pred: {pred}, adjusted_lag1: {adjusted_lag1}")
                 
                 days_to_fitr = (pd.to_datetime(holiday_periods['eid_ul_fitr'][2][0], utc=True).tz_localize(None) - dt).days if is_eid_date(dt, {'eid_ul_fitr': holiday_periods['eid_ul_fitr']}) else None
                 if days_to_fitr and 0 < days_to_fitr <= 2:
@@ -161,15 +169,19 @@ if user_date:
             
             features_array = np.array([[demand_lag1, demand_lag2, demand_lag3, roll_mean, hour_sin]])
             eid_type = is_eid_date(dt, holiday_periods)
+            st.write(f"Prediction eid_type: {eid_type}")
             if eid_type == 'eid_ul_fitr':
                 pred = rf_eid_fitr.predict(features_array)[0]
                 adjusted_lag1 = demand_lag1 * 0.2 + eid_fitr_mean * 0.8 if demand_lag1 > eid_fitr_mean else demand_lag1
+                st.write(f"Using Eid ul Fitr model, pred: {pred}, adjusted_lag1: {adjusted_lag1}")
             elif eid_type == 'eid_ul_adha':
                 pred = rf_eid_adha.predict(features_array)[0]
                 adjusted_lag1 = demand_lag1 * 0.2 + eid_adha_mean * 0.8 if demand_lag1 > eid_adha_mean else demand_lag1
+                st.write(f"Using Eid ul Adha model, pred: {pred}, adjusted_lag1: {adjusted_lag1}")
             else:
                 pred = rf_general.predict(features_array)[0]
                 adjusted_lag1 = demand_lag1
+                st.write(f"Using General model, pred: {pred}, adjusted_lag1: {adjusted_lag1}")
             
             predictions.append(pred)
             
